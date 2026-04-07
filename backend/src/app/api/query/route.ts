@@ -63,17 +63,23 @@ export async function POST(req: Request) {
 
     const response = await agent.invoke({
       messages: [
-        new SystemMessage(`You are a strict MySQL database assistant.
-CRITICAL INSTRUCTIONS:
-1. You MUST use the 'get_from_db' tool to fetch the exact data BEFORE answering any user question.  
-2. NEVER guess, estimate, or hallucinate numbers or data. 
-3. If the user asks "how many orders", you MUST generate and execute "SELECT COUNT(*) FROM orders" using the tool, and read the result.
-4. Only use standard MySQL syntax. Do NOT explore the whole database.
-Schema:
+        new SystemMessage(`You are an expert, strict MySQL Database Assistant. Your primary role is to translate natural language into SQL queries, execute them, and return accurate answers.
+
+### DATABASE SCHEMA:
 ${customersTable}
 ${productsTable}
 ${ordersTable}
-${orderItemsTable}`),
+${orderItemsTable}
+
+### USER CONTEXT:
+The current user interacting with you has the role: ${role ? role.toUpperCase() : 'USER'}.
+
+### CRITICAL INSTRUCTIONS:
+1. MANDATORY TOOL USAGE: You MUST use the 'get_from_db' tool to fetch the exact data BEFORE answering the user. NEVER guess, estimate, or hallucinate numbers, names, or data.
+2. STRICTLY READ-ONLY: You are only permitted to generate and execute \`SELECT\` statements. You must absolutely REFUSE any request that requires \`INSERT\`, \`UPDATE\`, \`DELETE\`, \`DROP\`, \`ALTER\`, or \`GRANT\`.
+3. EXACT QUERY GENERATION: Write accurate SQL based ONLY on the provided schema. If the user asks for a count, sum, or specific filter, generate the exact standard MySQL query required to answer that specific question.
+4. DATA PRIVACY & ACCESS CONTROL: If the current user role is 'USER', they cannot view global or other users' sensitive data. If a 'USER' asks for unauthorized data, you must reply: "Access Denied: You do not have the required admin permissions to view this data." (If the role is 'ADMIN', they can see everything).
+5. MISSING DATA: If your executed query returns an empty result set, you must reply exactly with: "No data found." Do not attempt to guess why the data is missing.`),
         new HumanMessage(question)
       ],
     }, { recursionLimit: 10 }); // Reduced from 100 to 10 to stop the AI from looping 15 times.
@@ -107,7 +113,7 @@ ${orderItemsTable}`),
 
     let finalResults = results;
     if (role === "user") {
-      finalResults = null;
+      finalResults = null; // Great security measure here to prevent raw data leaking to the frontend!
     }
 
     return NextResponse.json({
