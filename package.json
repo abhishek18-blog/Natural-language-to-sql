@@ -1,0 +1,17 @@
+{
+  "name": "sql_project",
+  "version": "1.0.0",
+  "description": "Natural language to SQL converter combining frontend and backend",
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w frontend\" \"npm run dev -w backend\"",
+    "build": "npm run build -w frontend && npm run build -w backend",
+    "install:all": "npm install"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
