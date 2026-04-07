@@ -163,6 +163,7 @@ export function MainApp() {
           queryUsedForOutput={queryUsedForOutput}
           queryResult={queryResult}
           aiResponse={aiResponse}
+          userRole={userRole}
         />
       </div>
     </div>

@@ -10,9 +10,10 @@ interface ConverterPanelProps {
   queryUsedForOutput: string;
   queryResult?: any[] | null;
   aiResponse?: string;
+  userRole: string;
 }
 
-export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading, queryUsedForOutput, queryResult, aiResponse }: ConverterPanelProps) {
+export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading, queryUsedForOutput, queryResult, aiResponse, userRole }: ConverterPanelProps) {
   const [query, setQuery] = useState(currentQuery);
   const [provider, setProvider] = useState<'local' | 'online'>('online');
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
@@ -179,12 +180,20 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
         </div>
 
         {/* Generated Output Area */}
-        {(currentSql || aiResponse) && (
+        {(currentSql || aiResponse || isLoading) && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex-1 flex flex-col lg:flex-row gap-6"
+            className="flex-1 flex flex-col lg:flex-row gap-6 relative"
           >
+            {isLoading && !aiResponse && (
+              <div className="absolute inset-0 bg-zinc-950/40 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-3xl border border-zinc-800/60 animate-pulse">
+                <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4" />
+                <p className="text-zinc-400 font-medium">AI is analyzing your database...</p>
+                <p className="text-xs text-zinc-600 mt-1">This might take a moment depending on the complexity.</p>
+              </div>
+            )}
+
             {/* Left Column: AI Answer and Table */}
             <div className="flex-1 flex flex-col rounded-3xl border border-zinc-800/80 bg-zinc-950/60 backdrop-blur-sm overflow-hidden shadow-2xl">
               {/* Context Info */}
@@ -238,10 +247,17 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
                   </div>
                 </div>
               )}
+
+              {/* AI Warning Disclaimer */}
+              <div className="px-6 py-4 bg-zinc-900/40 border-t border-zinc-800/40 flex flex-col gap-2">
+                <p className="text-xs text-zinc-500 leading-relaxed italic">
+                  Note: AI can make mistakes, so always cross-check the results. For privacy and security, standard users cannot view the underlying SQL queries or see other users' history. Only authorized database admins can track and evaluate the actual queries executed.
+                </p>
+              </div>
             </div>
 
             {/* Right Column: Query Used (Admins only) */}
-            {currentSql && (
+            {(currentSql && userRole.toLowerCase() === 'admin') && (
               <div className="flex-1 lg:max-w-md xl:max-w-lg flex flex-col rounded-3xl border border-zinc-800/80 bg-zinc-950/60 backdrop-blur-sm overflow-hidden shadow-2xl h-fit">
               <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/60 bg-zinc-900/40">
                 <div className="flex items-center gap-3">

@@ -51,8 +51,7 @@ export async function message(messages: StoredMessage[]) {
   const agent = createReactAgent({
     llm: new ChatGroq({
       apiKey: process.env.GROQ_API_KEY,
-      // Update this line to a currently supported model
-      model: "llama-3.1-8b-instant", 
+      model: "llama-3.1-8b-instant",
       temperature: 0,
     }),
     tools: [getFromDB],
