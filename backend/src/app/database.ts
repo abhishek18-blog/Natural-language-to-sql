@@ -3,7 +3,14 @@
 import mysql from 'mysql2/promise';
 
 export async function seed() {
-  console.log("Using local MySQL DB, mock seeding skipped.");
+  try {
+    const connection = await mysql.createConnection(process.env.DATABASE_URL!);
+    await connection.ping();
+    console.log("✅ SUCCESS: Database is actively connected and reachable!");
+    await connection.end();
+  } catch (error: any) {
+    console.error("❌ ERROR: Could not connect to the database. Reason:", error.message);
+  }
 }
 
 export async function execute(sql: string) {
@@ -19,9 +26,10 @@ export async function execute(sql: string) {
     // Close the connection
     await connection.end();
     
+    console.log("✅ Query successful!");
     return rows;
   } catch (error: any) {
-    console.error("Database error:", error);
+    console.error("❌ Database query error:", error);
     throw new Error(`Database connection or query failed: ${error.message}`);
   }
 }
