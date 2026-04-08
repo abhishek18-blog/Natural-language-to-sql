@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, Copy, Check, Cpu, Globe, ChevronDown, Database, Terminal, Code2, Play, Table as TableIcon, Bot } from 'lucide-react';
+import { Copy, Check, Cpu, Globe, ChevronDown, Database, Terminal, Code2, Play, Table as TableIcon, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface ConverterPanelProps {
   onConvert: (query: string, provider: 'local' | 'online') => void;
@@ -18,6 +19,7 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
   const [provider, setProvider] = useState<'local' | 'online'>('online');
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isCheckingLocal, setIsCheckingLocal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -69,20 +71,17 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
 
       <div className="flex-1 overflow-y-auto px-6 py-8 md:px-12 md:py-10 z-10 flex flex-col relative max-w-5xl mx-auto w-full">
         {/* Header Section */}
-        <div className="mb-10 text-center space-y-3">
-          <div className="inline-flex items-center justify-center p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl mb-2 shadow-sm">
-            <Sparkles className="w-6 h-6 text-indigo-400" />
-          </div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
+        <div className="mb-10 text-center space-y-3 mt-4 relative z-10">
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-cyan-400 leading-tight pb-1">
             Natural Language to SQL
           </h1>
-          <p className="text-zinc-400 max-w-2xl mx-auto text-sm md:text-base">
+          <p className="text-zinc-400 max-w-2xl mx-auto text-sm md:text-base font-medium">
             Translate plain English into optimized, production-ready SQL queries instantly using advanced AI models.
           </p>
         </div>
 
         {/* Input Area Container */}
-        <div className="w-full relative shadow-2xl rounded-3xl bg-zinc-950/40 border border-zinc-800/80 backdrop-blur-sm mb-12">
+        <div className="w-full relative shadow-[0_8px_30px_rgb(0,0,0,0.4)] rounded-2xl bg-zinc-950/60 border border-zinc-800/80 backdrop-blur-md mb-12 transition-all duration-300 focus-within:border-indigo-500/50 focus-within:shadow-[0_0_40px_rgba(99,102,241,0.15)] ring-1 ring-white/5">
           
           <form onSubmit={handleSubmit} className="p-1 flex flex-col">
             <textarea
@@ -91,12 +90,12 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="E.g., Find all users who purchased a pro subscription in the last 30 days..."
-              className="w-full min-h-[140px] bg-transparent rounded-t-3xl px-6 py-5 text-zinc-100 text-base md:text-lg placeholder:text-zinc-600 focus:outline-none resize-none leading-relaxed"
+              className="w-full min-h-[140px] bg-transparent rounded-t-2xl px-6 py-5 text-zinc-100 text-base md:text-lg placeholder:text-zinc-600 focus:outline-none resize-none leading-relaxed transition-colors"
               disabled={isLoading}
             />
 
             {/* Toolbar inside input */}
-            <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/60 rounded-b-[22px] border-t border-zinc-800/60 mt-auto">
+            <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/80 rounded-b-xl border-t border-zinc-800/60 mt-auto">
               {/* AI Provider Dropdown */}
               <div className="relative" ref={menuRef}>
                 <button
@@ -138,14 +137,34 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setProvider('local'); setProviderMenuOpen(false); }}
+                        onClick={async () => { 
+                          setProviderMenuOpen(false); 
+                          setIsCheckingLocal(true);
+                          try {
+                            const res = await fetch("http://localhost:3000/api/check-local-ai");
+                            const data = await res.json();
+                            if (data.success) {
+                              setProvider('local');
+                              toast.success("Local AI connection successful!", { description: data.message });
+                            } else {
+                              setProvider('online');
+                              toast.error("Local AI connection failed or could not exist", { description: data.message });
+                            }
+                          } catch (e) {
+                            setProvider('online');
+                            toast.error("Local AI connection failed or could not exist");
+                          } finally {
+                            setIsCheckingLocal(false);
+                          }
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-800/60 transition-colors text-left group mt-1"
+                        disabled={isCheckingLocal}
                       >
                         <div className="p-1.5 bg-green-500/10 text-green-400 rounded-md group-hover:bg-green-500/20">
                           <Cpu className="w-4 h-4" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-zinc-200">Local AI</span>
+                          <span className="text-sm font-medium text-zinc-200">Local AI {isCheckingLocal && '(Scanning...)'}</span>
                           <span className="text-[10px] text-zinc-500">Private & offline (Slow)</span>
                         </div>
                       </button>
@@ -160,7 +179,7 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
                 <button
                   type="submit"
                   disabled={isLoading || !query.trim()}
-                  className="flex items-center gap-2 px-5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-all font-medium text-sm shadow-lg shadow-indigo-500/20"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white rounded-xl disabled:from-zinc-800 disabled:to-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed transition-all font-semibold text-sm shadow-lg shadow-indigo-500/25"
                 >
                   {isLoading ? (
                     <>
@@ -195,18 +214,19 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
             )}
 
             {/* Left Column: AI Answer and Table */}
-            <div className="flex-1 flex flex-col rounded-3xl border border-zinc-800/80 bg-zinc-950/60 backdrop-blur-sm overflow-hidden shadow-2xl">
+            <div className="flex-1 flex flex-col rounded-2xl border border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md overflow-hidden shadow-2xl ring-1 ring-white/5">
               {/* Context Info */}
-              <div className="px-6 py-4 border-b border-zinc-800/40 bg-zinc-900/20 flex items-center gap-3 text-sm">
-                <div className="p-1.5 bg-indigo-500/10 rounded-md">
+              <div className="px-6 py-4 border-b border-zinc-800/60 bg-zinc-900/40 flex items-center gap-3 text-sm">
+                <div className="p-1.5 bg-indigo-500/10 rounded-md ring-1 ring-indigo-500/20">
                   <Bot className="w-4 h-4 text-indigo-400" />
                 </div>
                 <h3 className="font-semibold text-zinc-100">AI Response</h3>
               </div>
 
               {/* Chat Bubble Response */}
-              <div className="p-6 bg-[#0d0d0f]">
-                <p className="text-zinc-200 text-base leading-relaxed">
+              <div className="p-6 bg-zinc-950 relative">
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-cyan-500"></div>
+                <p className="text-zinc-200 text-base leading-relaxed pl-2 font-medium">
                   {aiResponse || "I have generated the query and retrieved the data for you."}
                 </p>
               </div>
@@ -258,7 +278,7 @@ export function ConverterPanel({ onConvert, currentQuery, currentSql, isLoading,
 
             {/* Right Column: Query Used (Admins only) */}
             {(currentSql && userRole.toLowerCase() === 'admin') && (
-              <div className="flex-1 lg:max-w-md xl:max-w-lg flex flex-col rounded-3xl border border-zinc-800/80 bg-zinc-950/60 backdrop-blur-sm overflow-hidden shadow-2xl h-fit">
+              <div className="flex-1 lg:max-w-md xl:max-w-lg flex flex-col rounded-2xl border border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md overflow-hidden shadow-2xl h-fit ring-1 ring-white/5">
               <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/60 bg-zinc-900/40">
                 <div className="flex items-center gap-3">
                   <div className="p-1.5 bg-zinc-800 rounded-md">

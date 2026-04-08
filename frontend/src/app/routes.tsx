@@ -2,9 +2,15 @@ import { createBrowserRouter, Outlet } from "react-router";
 import { MainApp } from "./components/MainApp";
 import { Login } from "./components/Login";
 import { Signup } from "./components/Signup";
+import { Toaster } from "sonner";
 
 function Root() {
-  return <Outlet />;
+  return (
+    <>
+      <Toaster position="top-right" theme="dark" />
+      <Outlet />
+    </>
+  );
 }
 
 export const router = createBrowserRouter([

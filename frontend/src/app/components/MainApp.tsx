@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { ConverterPanel } from './ConverterPanel';
 import { useNavigate } from 'react-router';
 import { LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 
 export interface HistoryItem {
   id: string;
@@ -56,6 +57,14 @@ export function MainApp() {
     setIsLoading(true);
     setCurrentQuery(query);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      // 5 seconds buffer: if online AI is selected and no internet is detected, abort
+      if (provider === 'online' && !navigator.onLine) {
+        controller.abort(new Error('offline'));
+      }
+    }, 5000);
+
     try {
       const response = await fetch('http://localhost:3000/api/query', {
         method: 'POST',
@@ -64,10 +73,14 @@ export function MainApp() {
         },
         body: JSON.stringify({
           question: query,
-          role: userRole.toLowerCase()
-        })
+          role: userRole.toLowerCase(),
+          provider
+        }),
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || 'API request failed');
@@ -95,11 +108,31 @@ export function MainApp() {
       setHistory(prev => [newItem, ...prev]);
       setSelectedId(newItem.id);
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('Conversion failed:', error);
-      setCurrentSql(`-- Error: ${error.message || 'Failed to communicate with AI provider'}`);
+      
+      const errorMsg = error.message?.toLowerCase() || '';
+      const isNetworkError = error.name === 'AbortError' ||
+                             errorMsg === 'offline' ||
+                             errorMsg.includes('failed to fetch') || 
+                             errorMsg.includes('fetch failed') || 
+                             errorMsg.includes('enotfound') || 
+                             errorMsg.includes('econnrefused') || 
+                             errorMsg.includes('network connection');
+
+      // navigator.onLine is also a good check for browser internet connection
+      if (provider === 'online' && (isNetworkError || !navigator.onLine)) {
+        setCurrentSql('-- Error: Network connection failed.');
+        setAiResponse("Network issue detected. Please check your internet connection and try again.");
+        toast.error("Network error. Try again");
+      } else {
+        setCurrentSql(`-- Error: ${error.message || 'Failed to communicate with AI provider'}`);
+        setAiResponse("I encountered an issue generating a response.");
+        toast.error("An error occurred during generation.");
+      }
+
       setQueryUsedForOutput(query);
       setQueryResult(null);
-      setAiResponse("I encountered an issue generating a response.");
     } finally {
       setIsLoading(false);
     }

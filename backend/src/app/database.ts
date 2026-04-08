@@ -29,7 +29,6 @@ export async function execute(sql: string) {
     console.log("✅ Query successful!");
     return rows;
   } catch (error: any) {
-    console.error("❌ Database query error:", error);
-    throw new Error(`Database connection or query failed: ${error.message}`);
+    throw new Error(`SQL Syntax or Execution Error: ${error.message}`);
   }
 }
