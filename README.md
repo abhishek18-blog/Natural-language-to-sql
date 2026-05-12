@@ -13,7 +13,7 @@
 
 ## 📖 Overview
 
-**Natural Language to SQL** is a full-stack AI-powered web application that allows users to query a MySQL database using plain English. It supports two AI backends:
+**Natural Language (Agentic) to SQL** is a full-stack AI-powered web application that allows users to query a MySQL database using plain English. It supports two AI backends:
 
 - **Online AI (Groq Cloud)** — Fast, precise, uses `llama-3.1-8b-instant` via the Groq API.
 - **Local AI (Ollama)** — Private, offline, uses `llama3.2:latest` running on your own machine.
