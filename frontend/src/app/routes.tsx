@@ -7,7 +7,7 @@ import { Toaster } from "sonner";
 function Root() {
   return (
     <>
-      <Toaster position="top-right" theme="dark" />
+      <Toaster position="top-right" theme="system" />
       <Outlet />
     </>
   );

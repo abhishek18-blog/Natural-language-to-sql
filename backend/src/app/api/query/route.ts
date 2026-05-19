@@ -60,8 +60,9 @@ STRICT RULES — FOLLOW EXACTLY:
 11. ${privacyRule}
 12. ALWAYS use IN instead of = when comparing against a subquery. Example: WHERE id IN (SELECT ...) NOT WHERE id = (SELECT ...)
 13. NEVER use LIMIT inside an IN() subquery — MySQL does not support it. Instead, use a JOIN with a derived table. Example: JOIN (SELECT film_id FROM rental GROUP BY film_id ORDER BY COUNT(*) DESC LIMIT 1) AS top ON film.film_id = top.film_id
-14. CROSS-DB PROTECTION: You are connected to the '${database || 'sakila'}' database. If the user's question asks about a topic that clearly belongs to a different database (e.g. asking about flights/passengers in the movie database, or asking about movies/rentals in the airport database), output exactly: CROSS_DB_ERROR
-15. NEVER hallucinate columns. Always double-check the schema before using a column name. Do NOT assume common columns like 'store_id' or 'status' exist on every table.
+14. NEVER hallucinate columns. Always double-check the schema before using a column name. Do NOT assume common columns like 'store_id' or 'status' exist on every table.
+15. PROPER AGGREGATES: Match the SQL aggregate function exactly to the user's phrasing. If the user asks for "average", "mean", or "avg", you MUST use AVG(). NEVER substitute or use COUNT() when an average is requested. Use COUNT() only when explicitly asked for "how many", "total number of", "quantity", or "frequency". Double-check that SUM(), AVG(), COUNT(), MIN(), and MAX() accurately reflect the mathematical intent of the prompt.
+16. CROSS-DB PROTECTION: You are connected to the '${database || 'sakila'}' database. If the user's question asks about a topic that clearly belongs to a different database (e.g. asking about flights/passengers in the movie database, or asking about movies/rentals in the airport database), output exactly: CROSS_DB_ERROR
 
 Schema:
 ${schemaStr}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
 import { ConverterPanel } from './ConverterPanel';
 import { useNavigate } from 'react-router';
-import { LogOut } from 'lucide-react';
+import { LogOut, Moon, Sun } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface HistoryItem {
@@ -32,6 +32,22 @@ export function MainApp() {
   const [aiResponse, setAiResponse] = useState<string>('');
   const [serverLogs, setServerLogs] = useState<string[]>([]);
   const [userRole, setUserRole] = useState<string>('User');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   useEffect(() => {
     const role = localStorage.getItem('user-role') || 'User';
@@ -190,7 +206,7 @@ export function MainApp() {
   };
 
   return (
-    <div className="h-screen w-full flex bg-[#09090b] text-zinc-100 overflow-hidden font-sans selection:bg-indigo-500/30">
+    <div className="h-screen w-full flex bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-slate-300 dark:bg-indigo-500/30 dark:selection:bg-indigo-500/30">
       <Sidebar
         history={history}
         onSelectHistory={handleSelectHistory}
@@ -199,22 +215,31 @@ export function MainApp() {
       />
       
       <div className="flex-1 flex flex-col relative">
-        <header className="h-16 border-b border-zinc-800/80 bg-zinc-950/50 backdrop-blur flex items-center justify-between px-6 z-10 w-full overflow-hidden">
+        <header className="h-16 border-b border-slate-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/50 backdrop-blur flex items-center justify-between px-6 z-10 w-full overflow-hidden">
           <div className="flex items-center gap-4 flex-wrap flex-1 max-w-full min-w-0 pr-4">
             <div className="flex items-center shrink-0">
-              <span className="text-sm font-medium text-zinc-400 mr-2">Role: <span className="text-zinc-200">{userRole}</span></span>
-              <span className="px-2 py-0.5 rounded-full bg-zinc-800/50 border border-zinc-700 text-[10px] text-zinc-400 font-medium tracking-wide">
+              <span className="text-sm font-medium text-slate-500 dark:text-zinc-400 mr-2">Role: <span className="text-slate-700 dark:text-zinc-200">{userRole}</span></span>
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 text-[10px] text-slate-500 dark:text-zinc-400 font-medium tracking-wide">
                 BETA
               </span>
             </div>
           </div>
-          <button 
-            onClick={() => navigate('/login')}
-            className="flex shrink-0 items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={toggleTheme}
+              className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-black dark:hover:text-zinc-100 transition-colors"
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button 
+              onClick={() => navigate('/login')}
+              className="flex shrink-0 items-center gap-2 text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:text-zinc-100 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
         </header>
         
         <ConverterPanel
