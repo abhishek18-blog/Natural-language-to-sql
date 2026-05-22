@@ -161,9 +161,11 @@ export function MainApp() {
                              errorMsg.includes('network connection'));
 
       if (isCancelled) {
-        setCurrentSql('');
-        setAiResponse('');
-        toast.info("User cancelled the request");
+        setCurrentSql('-- Process aborted by user');
+        setAiResponse('User aborted the process');
+        toast.info("User aborted the process");
+        // Add a slight delay so the UI shows the "Cancelling..." spin state
+        await new Promise(resolve => setTimeout(resolve, 800));
       } else if (provider === 'online' && (isNetworkError || !navigator.onLine)) {
         setCurrentSql('-- Error: Network connection failed.');
         setAiResponse("Network issue detected. Please check your internet connection and try again.");

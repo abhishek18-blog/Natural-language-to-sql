@@ -24,10 +24,16 @@ export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, 
   const [databaseMenuOpen, setDatabaseMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCheckingLocal, setIsCheckingLocal] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const dbMenuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
+  useEffect(() => {
+    if (!isLoading) {
+      setIsCancelling(false);
+    }
+  }, [isLoading]);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -237,11 +243,14 @@ export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, 
                 {isLoading ? (
                   <button
                     type="button"
-                    onClick={() => onCancel && onCancel()}
+                    onClick={() => {
+                      setIsCancelling(true);
+                      if (onCancel) onCancel();
+                    }}
                     className="flex items-center gap-2 px-6 py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/50 rounded-xl transition-all font-semibold text-sm"
                   >
                     <div className="w-4 h-4 border-2 border-rose-400/30 border-t-rose-400 rounded-full animate-spin" />
-                    Cancel Generation
+                    {isCancelling ? 'Cancelling...' : 'Cancel Generation'}
                   </button>
                 ) : (
                   <button
