@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-
-
 import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
-
-
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
 
@@ -294,7 +290,7 @@ Schema:
 ${schemaStr}`),
       new HumanMessage(question),
     ],
-  }, { recursionLimit: 40, signal }); //changed recursion limit to 5
+  }, { recursionLimit: 5, signal }); //changed recursion limit to 5
 
 
   const messages = response.messages;
