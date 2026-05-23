@@ -290,7 +290,7 @@ Schema:
 ${schemaStr}`),
       new HumanMessage(question),
     ],
-  }, { recursionLimit: 5, signal }); //changed recursion limit to 5
+  }, { recursionLimit: 15, signal }); //changed recursion limit to 15
 
 
   const messages = response.messages;
