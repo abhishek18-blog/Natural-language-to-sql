@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Copy, Check, Cpu, Globe, ChevronDown, Database, Terminal, Code2, Play, Table as TableIcon, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '../config';
 
 interface ConverterPanelProps {
-  onConvert: (query: string, provider: 'local' | 'online', database: string) => void;
+  onConvert: (query: string, provider: 'local' | 'online', database: string, strategy?: 'two-call' | 'react') => void;
   onCancel?: () => void;
   currentQuery: string;
   currentSql: string;
@@ -19,6 +20,7 @@ interface ConverterPanelProps {
 export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, isLoading, queryUsedForOutput, queryResult, aiResponse, userRole, serverLogs = [] }: ConverterPanelProps) {
   const [query, setQuery] = useState(currentQuery);
   const [provider, setProvider] = useState<'local' | 'online'>('online');
+  const [strategy, setStrategy] = useState<'two-call' | 'react'>('two-call');
   const [database, setDatabase] = useState<'sakila' | 'airportdb'>('sakila');
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [databaseMenuOpen, setDatabaseMenuOpen] = useState(false);
@@ -50,7 +52,7 @@ export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (query.trim() && !isLoading) {
-      onConvert(query, provider, database);
+      onConvert(query, provider, database, strategy);
     }
   };
 
@@ -171,7 +173,11 @@ export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, 
                   ) : (
                     <Cpu className="w-4 h-4 text-green-400" />
                   )}
-                  {provider === 'online' ? 'Online AI' : 'Local AI'}
+                  {provider === 'online' 
+                    ? 'Online AI (ReAct)' 
+                    : strategy === 'two-call' 
+                      ? 'Local (2-Call Pattern)' 
+                      : 'Local (ReAct Baseline)'}
                   <ChevronDown className={`w-3 h-3 text-zinc-500 transition-transform ${providerMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -182,39 +188,41 @@ export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, 
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl overflow-hidden p-1 z-50 origin-bottom-left"
+                      className="absolute bottom-full left-0 mb-2 w-64 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl overflow-hidden p-1 z-50 origin-bottom-left"
                     >
+                      {/* Option 1: Online AI */}
                       <button
                         type="button"
-                        onClick={() => { setProvider('online'); setProviderMenuOpen(false); }}
+                        onClick={() => { setProvider('online'); setStrategy('react'); setProviderMenuOpen(false); }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-200 dark:bg-zinc-800/60 transition-colors text-left group"
                       >
                         <div className="p-1.5 bg-slate-200/30 dark:bg-indigo-500/10 text-slate-900 dark:text-indigo-400 rounded-md group-hover:bg-slate-200 dark:bg-indigo-500/20">
                           <Globe className="w-4 h-4" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">Online AI</span>
-                          <span className="text-[10px] text-zinc-500">Fast & precise (Cloud)</span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">Online AI (Cloud ReAct)</span>
+                          <span className="text-[10px] text-zinc-500">Fast & precise (Groq / gpt-oss-120b)</span>
                         </div>
                       </button>
+
+                      {/* Option 2: Local 2-Call Pattern (Proposed) */}
                       <button
                         type="button"
                         onClick={async () => { 
                           setProviderMenuOpen(false); 
                           setIsCheckingLocal(true);
                           try {
-                            const res = await fetch("http://localhost:3000/api/check-local-ai");
+                            const res = await fetch(`${API_BASE_URL}/api/check-local-ai`);
                             const data = await res.json();
                             if (data.success) {
                               setProvider('local');
-                              toast.success("Local AI connection successful!", { description: data.message });
+                              setStrategy('two-call');
+                              toast.success("Local AI connected!", { description: "Using proposed 2-Call Pattern." });
                             } else {
-                              setProvider('online');
-                              toast.error("Local AI connection failed or could not exist", { description: data.message });
+                              toast.error("Local AI check failed", { description: data.message });
                             }
                           } catch (e) {
-                            setProvider('online');
-                            toast.error("Local AI connection failed or could not exist");
+                            toast.error("Could not reach Local AI on Ollama.");
                           } finally {
                             setIsCheckingLocal(false);
                           }
@@ -226,8 +234,42 @@ export function ConverterPanel({ onConvert, onCancel, currentQuery, currentSql, 
                           <Cpu className="w-4 h-4" />
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">Local AI {isCheckingLocal && '(Scanning...)'}</span>
-                          <span className="text-[10px] text-zinc-500">Private & offline (Slow)</span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">Local (2-Call Pattern) ⭐</span>
+                          <span className="text-[10px] text-green-600 dark:text-green-400 font-medium">Proposed: Deterministic & fast (2 calls)</span>
+                        </div>
+                      </button>
+
+                      {/* Option 3: Local ReAct Baseline (Conventional) */}
+                      <button
+                        type="button"
+                        onClick={async () => { 
+                          setProviderMenuOpen(false); 
+                          setIsCheckingLocal(true);
+                          try {
+                            const res = await fetch(`${API_BASE_URL}/api/check-local-ai`);
+                            const data = await res.json();
+                            if (data.success) {
+                              setProvider('local');
+                              setStrategy('react');
+                              toast.info("Local AI Baseline selected", { description: "Using conventional multi-turn ReAct agent loop." });
+                            } else {
+                              toast.error("Local AI check failed", { description: data.message });
+                            }
+                          } catch (e) {
+                            toast.error("Could not reach Local AI on Ollama.");
+                          } finally {
+                            setIsCheckingLocal(false);
+                          }
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-200 dark:bg-zinc-800/60 transition-colors text-left group mt-1"
+                        disabled={isCheckingLocal}
+                      >
+                        <div className="p-1.5 bg-amber-500/10 text-amber-400 rounded-md group-hover:bg-amber-500/20">
+                          <Terminal className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-slate-800 dark:text-zinc-200">Local (ReAct Baseline)</span>
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400">Reviewer baseline: Multi-turn agent loop</span>
                         </div>
                       </button>
                     </motion.div>

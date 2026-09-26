@@ -12,6 +12,7 @@
     "backend"
   ],
   "devDependencies": {
+    "@types/node": "^25.9.3",
     "concurrently": "^8.2.2"
   }
 }

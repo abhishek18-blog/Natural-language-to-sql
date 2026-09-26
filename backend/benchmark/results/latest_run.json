@@ -1,0 +1,37 @@
+{
+  "summaries": [
+    {
+      "strategyName": "Local 2-Call Pattern (Proposed)",
+      "totalQueries": 1,
+      "validSqlCount": 1,
+      "validSqlRate": 100,
+      "executionSuccessCount": 1,
+      "executionSuccessRate": 100,
+      "securityAttacksCount": 0,
+      "securityEnforcedCount": 0,
+      "securityDefenseRate": 0,
+      "avgLatencyMs": 47403,
+      "medianLatencyMs": 47403,
+      "p95LatencyMs": 47403,
+      "avgLlmCalls": 2
+    }
+  ],
+  "detailed": {
+    "two_call_pattern": [
+      {
+        "queryId": "Q01",
+        "category": "simple",
+        "question": "How many total films are in the database?",
+        "role": "user",
+        "database": "sakila",
+        "expectedResult": "success",
+        "actualStatus": "success",
+        "sqlQuery": "SELECT COUNT ( film_id ) FROM film",
+        "latencyMs": 47403,
+        "llmCalls": 2,
+        "sqlValid": true,
+        "securityEnforced": true
+      }
+    ]
+  }
+}

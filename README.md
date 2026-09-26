@@ -15,10 +15,12 @@
 
 **Natural Language (Agentic) to SQL** is a full-stack AI-powered web application that allows users to query a MySQL database using plain English. It supports two AI backends:
 
-- **Online AI (Groq Cloud)** — Fast, precise, uses `llama-3.1-8b-instant` via the Groq API.
-- **Local AI (Ollama)** — Private, offline, uses `llama3.2:latest` running on your own machine.
+- **Online AI (Groq Cloud)** — Fast, precise, uses `openai/gpt-oss-120b` via Groq.
+- **Local AI (Ollama)** — Private, offline, uses `llama3.2:latest` running locally, supporting:
+  - **2-Call Pattern (Proposed)**: Ultra-fast, deterministic 2-call architecture (SQL Generation + Execution + Summarization).
+  - **Local ReAct Baseline (Conventional)**: Multi-turn LangGraph ReAct agent loop for direct empirical comparison.
 
-The app features role-based access control (User / Admin), query history, and real-time SQL execution against a live MySQL database.
+The app features fine-grained Role-Based Access Control (RBAC) with AST-level Column-Level Security (CLS), immutable read-only query guardrails, query history, and an automated 52-query benchmark harness.
 
 ---
 
@@ -148,7 +150,7 @@ ollama pull llama3.2:latest
 ```bash
 # Terminal 1 — Start the backend API server
 npm run dev -w backend
-# Runs on http://localhost:3000
+# Runs on http://localhost:3000 (or http://localhost:3001 if port 3000 is occupied)
 
 # Terminal 2 — Start the frontend dev server
 npm run dev -w frontend
@@ -156,6 +158,35 @@ npm run dev -w frontend
 ```
 
 Open **http://localhost:5173** in your browser.
+
+---
+
+## 🧪 Benchmark & Evaluation Suite (Reproducibility)
+
+An automated benchmark harness and 52-query curated dataset are included to systematically evaluate the **2-Call Pattern vs. Local ReAct Baseline** and **Security Guardrails vs. Baselines**:
+
+```bash
+# Run benchmark comparing 2-Call Pattern vs Local ReAct Baseline
+npm run benchmark -w backend
+
+# Options:
+# --strategy=all | two-call | react | online
+# --security=guardrails | keyword | none
+# --limit=10 (run first N queries)
+npm run benchmark -w backend -- --limit=10 --strategy=all
+
+# Output report generated at:
+# backend/benchmark/results/benchmark_report.md
+# backend/benchmark/results/latest_run.json
+```
+
+---
+
+## 🛡️ Security Architecture & RBAC
+
+1. **AST-Level Read-Only Query Guard**: Analyzes statement syntax with an AST parser before database dispatch. Destructive commands (`DROP`, `DELETE`, `UPDATE`, `ALTER`, `TRUNCATE`) and dangerous functions (`SLEEP`, `BENCHMARK`) are strictly blocked.
+2. **Column-Level Role-Based Access Control (RBAC)**: Enforces table and column permission boundaries based on role (`USER` vs `ADMIN`). Resolves wildcard expressions (`SELECT *`) to protect sensitive PII fields (`email`, `passportno`, `phone`, `address`).
+3. **Database-Level Fail-Safe**: `database.ts execute()` verifies queries prior to MySQL submission.
 
 ---
 
@@ -168,9 +199,12 @@ Converts a natural language question to SQL and returns the result.
 **Request Body:**
 ```json
 {
-  "question": "how many passengers are on flight AF1078?",
+  "question": "how many films are there?",
   "role": "user",
-  "provider": "online"
+  "provider": "local",
+  "strategy": "two-call",
+  "database": "sakila",
+  "securityMode": "guardrails"
 }
 ```
 
@@ -178,7 +212,10 @@ Converts a natural language question to SQL and returns the result.
 |---|---|---|---|
 | `question` | `string` | any | The natural language question |
 | `role` | `string` | `"user"` / `"admin"` | Controls data access permissions |
-| `provider` | `string` | `"online"` / `"local"` | AI provider to use |
+| `provider` | `string` | `"online"` / `"local"` / `"local-react"` | AI provider to use |
+| `strategy` | `string` | `"two-call"` / `"react"` | Query execution strategy |
+| `database` | `string` | `"sakila"` / `"airportdb"` | Target database schema |
+| `securityMode` | `string` | `"guardrails"` / `"keyword"` / `"none"` | Security evaluation mode |
 
 **Response:**
 ```json

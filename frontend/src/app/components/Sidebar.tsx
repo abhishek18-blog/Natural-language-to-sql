@@ -2,15 +2,7 @@ import { Search, History, Trash2, Clock, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 
-interface HistoryItem {
-  id: string;
-  query: string;
-  sql?: string;
-  timestamp: number;
-  provider: 'local' | 'online';
-  aiResponse?: string;
-  results?: any[] | null;
-}
+import { HistoryItem } from './MainApp';
 
 interface SidebarProps {
   history: HistoryItem[];
@@ -69,16 +61,15 @@ export function Sidebar({ history, onSelectHistory, onClearHistory, selectedId }
               <button
                 key={item.id}
                 onClick={() => onSelectHistory(item)}
-                className={`w-full text-left p-4 rounded-xl transition-all group relative overflow-hidden ${
-                  selectedId === item.id
+                className={`w-full text-left p-4 rounded-xl transition-all group relative overflow-hidden ${selectedId === item.id
                     ? 'bg-slate-200 dark:bg-indigo-500/10 border-slate-300 dark:border-indigo-500/30'
                     : 'bg-slate-50 dark:bg-zinc-900/30 border-slate-200 dark:border-zinc-800/50 hover:bg-slate-100 dark:bg-zinc-900 hover:border-slate-300 dark:hover:border-zinc-700'
-                } border shadow-sm`}
+                  } border shadow-sm`}
               >
                 {selectedId === item.id && (
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-900 dark:bg-indigo-500 rounded-l-xl" />
                 )}
-                
+
                 <div className="flex items-start gap-3">
                   <div className="mt-1 shrink-0">
                     <CheckCircle2 className={`w-4 h-4 ${selectedId === item.id ? 'text-slate-900 dark:text-indigo-400' : 'text-slate-400 dark:text-zinc-600 group-hover:text-slate-500 dark:group-hover:text-zinc-500'}`} />
@@ -92,11 +83,10 @@ export function Sidebar({ history, onSelectHistory, onClearHistory, selectedId }
                         <Clock className="w-3 h-3" />
                         {formatDistanceToNow(item.timestamp, { addSuffix: true })}
                       </span>
-                      <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded ${
-                        item.provider === 'local'
+                      <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded ${item.provider === 'local'
                           ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                           : 'bg-slate-900 dark:bg-indigo-500/10 text-white dark:text-indigo-400 border border-slate-900 dark:border-indigo-500/20'
-                      }`}>
+                        }`}>
                         {item.provider}
                       </span>
                     </div>

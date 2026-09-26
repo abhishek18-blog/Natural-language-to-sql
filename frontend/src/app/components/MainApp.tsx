@@ -4,6 +4,7 @@ import { ConverterPanel } from './ConverterPanel';
 import { useNavigate } from 'react-router';
 import { LogOut, Moon, Sun } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '../config';
 
 export interface HistoryItem {
   id: string;
@@ -11,10 +12,12 @@ export interface HistoryItem {
   sql?: string;
   timestamp: number;
   provider: 'local' | 'online';
+  strategy?: 'two-call' | 'react';
   database: string;
   aiResponse?: string;
   results?: any[] | null;
   logs?: string[];
+  metrics?: any;
 }
 
 // We removed the mock DB functions since we now call the real API
@@ -73,7 +76,12 @@ export function MainApp() {
     }
   }, [history]);
 
-  const handleConvert = async (query: string, provider: 'local' | 'online', database: string) => {
+  const handleConvert = async (
+    query: string, 
+    provider: 'local' | 'online', 
+    database: string,
+    strategy: 'two-call' | 'react' = 'two-call'
+  ) => {
     setIsLoading(true);
     setCurrentQuery(query);
 
@@ -88,7 +96,7 @@ export function MainApp() {
     }, 5000);
 
     try {
-      const response = await fetch('http://localhost:3000/api/query', {
+      const response = await fetch(`${API_BASE_URL}/api/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +105,8 @@ export function MainApp() {
           question: query,
           role: userRole.toLowerCase(),
           provider,
-          database
+          database,
+          strategy,
         }),
         signal: controller.signal
       });
@@ -138,10 +147,12 @@ export function MainApp() {
         sql: data.sql_query,
         timestamp: Date.now(),
         provider,
+        strategy,
         database,
         aiResponse: data.answer,
         results: parsedResults,
-        logs: data.logs || []
+        logs: data.logs || [],
+        metrics: data.metrics,
       };
 
       setHistory(prev => [newItem, ...prev]);

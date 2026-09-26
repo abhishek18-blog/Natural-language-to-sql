@@ -1,6 +1,8 @@
 "use server";
 
 import mysql from 'mysql2/promise';
+import { validateReadOnly, validateRBAC } from './security/guardrails';
+import { UserRole } from './security/types';
 
 function getDbUrl(dbName?: string) {
   if (dbName === "airportdb") return process.env.DATABASE_URL_AIRPORT || process.env.DATABASE_URL!;
@@ -23,8 +25,35 @@ export async function seed(dbName?: string, addLog?: (msg: string) => void) {
   }
 }
 
-export async function execute(sql: string, dbName?: string, addLog?: (msg: string) => void) {
+export async function execute(
+  sql: string, 
+  dbName?: string, 
+  addLog?: (msg: string) => void,
+  options?: { role?: UserRole; skipGuard?: boolean }
+) {
   try {
+    // 🛡️ Fail-Safe Security Check: Read-Only Guard & Multi-Statement Block
+    if (!options?.skipGuard) {
+      const readOnlyCheck = validateReadOnly(sql);
+      if (!readOnlyCheck.allowed) {
+        const violationMsg = `🛡️ SECURITY VIOLATION: ${readOnlyCheck.blockedReason}`;
+        console.error(violationMsg);
+        if (addLog) addLog(violationMsg);
+        throw new Error(violationMsg);
+      }
+
+      // If user role is provided, enforce Column-Level RBAC
+      if (options?.role) {
+        const rbacCheck = validateRBAC(sql, options.role, dbName);
+        if (!rbacCheck.allowed) {
+          const violationMsg = `🛡️ RBAC VIOLATION: ${rbacCheck.blockedReason}`;
+          console.error(violationMsg);
+          if (addLog) addLog(violationMsg);
+          throw new Error(violationMsg);
+        }
+      }
+    }
+
     const msg1 = `Executing SQL on local MySQL: ${sql}`;
     console.log(msg1);
     if (addLog) addLog(msg1);
@@ -46,7 +75,7 @@ export async function execute(sql: string, dbName?: string, addLog?: (msg: strin
     const msg3 = `❌ SQL Execution Error: ${error.message}`;
     console.error(msg3);
     if (addLog) addLog(msg3);
-    throw new Error(`SQL Syntax or Execution Error: ${error.message}`);
+    throw error;
   }
 }
 
