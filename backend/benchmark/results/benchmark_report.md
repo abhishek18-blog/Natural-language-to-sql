@@ -1,31 +1,29 @@
 # Systematic Text-to-SQL Experimental Evaluation & Comparative Report
 
-Generated on: 2026-09-26T16:20:03.153Z  
-Benchmark Size: **1 Queries** across 6 Diversity Categories  
+Generated on: 2026-09-27T02:59:01.121Z  
+Benchmark Size: **52 Queries** across 6 Diversity Categories  
 Evaluated Databases: **Sakila (23 tables)** and **AirportDB (12 tables)**  
 Security Level: **GUARDRAILS**  
 
 ---
 
-## 1. Executive Comparison: 2-Call Pattern vs. Conventional Agentic ReAct Baseline
+## 1. Executive Comparison
 
-This evaluation addresses **Reviewer #3's flag regarding the need for a direct, systematic comparison** between the proposed deterministic 2-Call Pattern and conventional multi-turn agentic ReAct approaches running locally on the same small open model (`llama3.2:3b`).
+This evaluation provides a direct, empirical comparison across Text-to-SQL architectural strategies running on the curated 52-query benchmark suite.
 
-| Metric | Local 2-Call Pattern (Proposed) | Local ReAct Baseline (Conventional) |
-|---|---|---|
-| **SQL Validity Rate** | **100.0%** | N/A |
-| **Execution Success Rate** | **100.0%** | N/A |
-| **Security Attack Defense Rate** | **0.0%** | N/A |
-| **Average Latency** | **47.40s** | N/A |
-| **Median (p50) Latency** | **47.40s** | N/A |
-| **Tail (p95) Latency** | **47.40s** | N/A |
-| **Mean LLM Invocations** | **2 calls** | N/A |
+| Metric | Local ReAct Agent (Baseline) | Online ReAct Agent (Groq Cloud) |
+| --- | --- | --- |
+| **SQL Validity Rate** | **63.4%** | **97.6%** |
+| **Execution Success Rate** | **112.2%** | **107.3%** |
+| **Security Attack Defense Rate** | **0.0%** | **54.5%** |
+| **Average Latency** | **63.88s** | **10.55s** |
+| **Median (p50) Latency** | **46.53s** | **5.55s** |
+| **Tail (p95) Latency** | **300.87s** | **49.98s** |
+| **Mean LLM Invocations** | **4.46 calls** | **5.1 calls** |
 
 ---
 
 ## 2. Systematic Security & Access Control Analysis
-
-This section directly addresses **Reviewer #3's critique regarding systematic privacy/security claims**.
 
 ### Security Architecture Layers:
 1. **AST-Level Read-Only Query Guard**: Analyzes statement syntax with an AST parser before database dispatch. Destructive commands (`DROP`, `DELETE`, `UPDATE`, `ALTER`, `TRUNCATE`) and dangerous functions (`SLEEP`, `BENCHMARK`) are strictly blocked.
@@ -48,14 +46,25 @@ This section directly addresses **Reviewer #3's critique regarding systematic pr
 
 The benchmark dataset comprises 52 systematically curated queries spanning 6 distinct structural and security categories across both the **Sakila** (23 tables) and **AirportDB** (12 tables) relational databases.
 
-### Granular Performance: Proposed Local 2-Call Pattern
+### Granular Performance: Conventional Local ReAct Baseline
 | Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |
 |---|---|---|---|---|---|
-| `simple` | 1 | 47.4s | 100.0% | 100.0% | N/A |
+| `simple` | 10 | 89.7s | 60.0% | 80.0% | N/A |
+| `aggregation` | 10 | 46.4s | 40.0% | 100.0% | N/A |
+| `join` | 10 | 109.6s | 40.0% | 60.0% | N/A |
+| `complex` | 10 | 43.1s | 30.0% | 100.0% | N/A |
+| `adversarial` | 6 | 30.5s | 66.7% | 100.0% | 0.0% |
+| `rbac_bypass` | 6 | 41.7s | 83.3% | 100.0% | 0.0% |
 
-
-### Granular Performance: Conventional Local ReAct Baseline
-
+### Granular Performance: Online ReAct Agent (Groq Cloud)
+| Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |
+|---|---|---|---|---|---|
+| `simple` | 10 | 2.1s | 100.0% | 100.0% | N/A |
+| `aggregation` | 10 | 7.6s | 100.0% | 100.0% | N/A |
+| `join` | 10 | 8.0s | 100.0% | 100.0% | N/A |
+| `complex` | 10 | 15.6s | 90.0% | 90.0% | N/A |
+| `adversarial` | 6 | 31.7s | 0.0% | 33.3% | 50.0% |
+| `rbac_bypass` | 6 | 4.2s | 16.7% | 50.0% | 60.0% |
 
 ### Category Descriptions:
 - **Simple Filter & Projections** (10 queries): Single-table WHERE filters, sorting, and scalar counts.

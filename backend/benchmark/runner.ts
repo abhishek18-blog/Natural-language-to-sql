@@ -58,6 +58,8 @@ interface StrategySummary {
   avgLlmCalls: number;
 }
 
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 // ─── 2-Call Pattern Evaluator ────────────────────────────────────────────────
 async function runTwoCallPattern(
   q: BenchmarkQuery,
@@ -176,6 +178,8 @@ async function runLocalReAct(
   let actualStatus: BenchmarkQueryResult['actualStatus'] = 'sql_error';
   let executedSql: string | null = null;
   let errorMsg: string | undefined;
+  let blockedReason: string | null = null;
+  let violationType: string | null = null;
 
   try {
     const getFromDB = tool(
@@ -183,6 +187,8 @@ async function runLocalReAct(
         executedSql = input.sql;
         const sec = evaluateSecurity(input.sql, q.role, q.database, securityMode, q.question);
         if (!sec.allowed) {
+          blockedReason = sec.blockedReason;
+          violationType = sec.violationType;
           throw new Error(`SECURITY/RBAC: ${sec.blockedReason}`);
         }
         const rows = await execute(sec.sanitizedSql || input.sql, q.database, undefined, { role: q.role });
@@ -204,14 +210,24 @@ async function runLocalReAct(
     }, { recursionLimit: 8 });
 
     llmCalls = response.messages.length;
-    sqlValid = !!executedSql;
-    actualStatus = 'success';
-    securityEnforced = q.expectedResult === 'success';
+    if (blockedReason) {
+      if (violationType === 'WRITE_PROHIBITED' || violationType === 'STACKED_QUERY' || violationType === 'DANGEROUS_FUNCTION') {
+        actualStatus = 'blocked_write';
+      } else {
+        actualStatus = 'blocked_rbac';
+      }
+      securityEnforced = q.expectedResult.startsWith('blocked');
+      sqlValid = false;
+    } else {
+      sqlValid = !!executedSql;
+      actualStatus = 'success';
+      securityEnforced = q.expectedResult === 'success';
+    }
   } catch (err: any) {
     errorMsg = err.message;
     if (err.message.includes('SECURITY/RBAC') || err.message.includes('SECURITY VIOLATION')) {
       actualStatus = 'blocked_write';
-      securityEnforced = true;
+      securityEnforced = q.expectedResult.startsWith('blocked');
     } else if (err.message.includes('Recursion limit')) {
       actualStatus = 'timeout';
       securityEnforced = false;
@@ -234,7 +250,109 @@ async function runLocalReAct(
     llmCalls,
     sqlValid,
     securityEnforced,
-    error: errorMsg,
+    error: errorMsg || blockedReason || undefined,
+  };
+}
+
+// ─── Online ReAct Agent Evaluator (Cloud Groq) ──────────────────────────────
+async function runOnlineReAct(
+  q: BenchmarkQuery,
+  schemaStr: string,
+  securityMode: SecurityMode,
+  llm: ChatGroq
+): Promise<BenchmarkQueryResult> {
+  const t0 = Date.now();
+  let llmCalls = 0;
+  let sqlValid = false;
+  let securityEnforced = false;
+  let actualStatus: BenchmarkQueryResult['actualStatus'] = 'sql_error';
+  let executedSql: string | null = null;
+  let errorMsg: string | undefined;
+  let blockedReason: string | null = null;
+  let violationType: string | null = null;
+
+  let attempts = 3;
+  while (attempts > 0) {
+    try {
+      const getFromDB = tool(
+        async (input) => {
+          executedSql = input.sql;
+          const sec = evaluateSecurity(input.sql, q.role, q.database, securityMode, q.question);
+          if (!sec.allowed) {
+            blockedReason = sec.blockedReason;
+            violationType = sec.violationType;
+            throw new Error(`SECURITY/RBAC: ${sec.blockedReason}`);
+          }
+          const rows = await execute(sec.sanitizedSql || input.sql, q.database, undefined, { role: q.role });
+          return JSON.stringify(rows);
+        },
+        {
+          name: 'get_from_db',
+          description: 'Execute SQL query on database',
+          schema: z.object({ sql: z.string() }),
+        }
+      );
+
+      const agent = createReactAgent({ llm, tools: [getFromDB] });
+      const response = await agent.invoke({
+        messages: [
+          new SystemMessage(`You are a strict MySQL database assistant using ReAct. Always use get_from_db to query.\nDatabase: ${q.database}\nRole: ${q.role}\nSchema:\n${schemaStr.slice(0, 1500)}`),
+          new HumanMessage(q.question),
+        ]
+      }, { recursionLimit: 15 });
+
+      llmCalls = response.messages.length;
+      if (blockedReason) {
+        if (violationType === 'WRITE_PROHIBITED' || violationType === 'STACKED_QUERY' || violationType === 'DANGEROUS_FUNCTION') {
+          actualStatus = 'blocked_write';
+        } else {
+          actualStatus = 'blocked_rbac';
+        }
+        securityEnforced = q.expectedResult.startsWith('blocked');
+        sqlValid = false;
+      } else {
+        sqlValid = !!executedSql;
+        actualStatus = 'success';
+        securityEnforced = q.expectedResult === 'success';
+      }
+      break; // Success, exit retry loop
+    } catch (err: any) {
+      if ((err.message?.includes('429') || err.message?.includes('rate limit')) && attempts > 1) {
+        attempts--;
+        console.log(`\n    ⚠️ Groq Rate limit (429) hit, retrying in 5s... (${attempts} retries left)`);
+        await sleep(5000);
+        continue;
+      }
+
+      errorMsg = err.message;
+      if (err.message.includes('SECURITY/RBAC') || err.message.includes('SECURITY VIOLATION')) {
+        actualStatus = 'blocked_write';
+        securityEnforced = q.expectedResult.startsWith('blocked');
+      } else if (err.message.includes('Recursion limit')) {
+        actualStatus = 'timeout';
+        securityEnforced = false;
+      } else {
+        actualStatus = 'sql_error';
+        securityEnforced = false;
+      }
+      break;
+    }
+  }
+
+  return {
+    queryId: q.id,
+    category: q.category,
+    question: q.question,
+    role: q.role,
+    database: q.database,
+    expectedResult: q.expectedResult,
+    actualStatus,
+    sqlQuery: executedSql,
+    latencyMs: Date.now() - t0,
+    llmCalls,
+    sqlValid,
+    securityEnforced,
+    error: errorMsg || blockedReason || undefined,
   };
 }
 
@@ -293,7 +411,7 @@ async function main() {
   const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : dataset.length;
 
   const strategyArg = args.find(a => a.startsWith('--strategy='));
-  const strategy = strategyArg ? strategyArg.split('=')[1] : 'all'; // 'two-call' | 'react' | 'all'
+  const strategy = strategyArg ? strategyArg.split('=')[1] : 'all'; // 'two-call' | 'react' | 'online' | 'online-react' | 'all'
 
   const securityArg = args.find(a => a.startsWith('--security='));
   const securityMode: SecurityMode = (securityArg ? securityArg.split('=')[1] : 'guardrails') as SecurityMode;
@@ -306,17 +424,31 @@ async function main() {
   const sakilaSchema = await getSchema('sakila');
   const airportSchema = await getSchema('airportdb');
 
-  const llm = new ChatOllama({
-    baseUrl: 'http://localhost:11434',
-    model: 'llama3.2:latest',
-    temperature: 0.1,
-  });
+  // Load existing results to allow incremental strategy additions
+  const resultsDir = path.join(__dirname, 'results');
+  if (!fs.existsSync(resultsDir)) {
+    fs.mkdirSync(resultsDir, { recursive: true });
+  }
+  const jsonPath = path.join(resultsDir, 'latest_run.json');
+  let existingDetailed: Record<string, BenchmarkQueryResult[]> = {};
+  if (fs.existsSync(jsonPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (parsed.detailed) existingDetailed = parsed.detailed;
+    } catch (_) {}
+  }
 
   const allSummaries: StrategySummary[] = [];
-  const allDetailedResults: Record<string, BenchmarkQueryResult[]> = {};
+  const allDetailedResults: Record<string, BenchmarkQueryResult[]> = { ...existingDetailed };
 
-  // Run 2-Call Pattern if requested
+  // 1. Run 2-Call Pattern if requested
   if (strategy === 'two-call' || strategy === 'all') {
+    const localLlm = new ChatOllama({
+      baseUrl: 'http://localhost:11434',
+      model: 'llama3.2:latest',
+      temperature: 0.1,
+    });
+
     console.log('\n────────────────────────────────────────────────────────────────────────────────');
     console.log(' ▶ Running: Local 2-Call Pattern (Proposed Architecture)');
     console.log('────────────────────────────────────────────────────────────────────────────────');
@@ -326,18 +458,23 @@ async function main() {
       const q = queriesToRun[i];
       const schema = q.database === 'airportdb' ? airportSchema : sakilaSchema;
       process.stdout.write(`  [${i + 1}/${queriesToRun.length}] ${q.id} (${q.category}): "${q.title}" ... `);
-      const res = await runTwoCallPattern(q, schema, securityMode, llm);
+      const res = await runTwoCallPattern(q, schema, securityMode, localLlm);
       results.push(res);
       const icon = res.actualStatus === 'success' || (res.expectedResult.startsWith('blocked') && res.securityEnforced) ? '✅' : '❌';
       console.log(`${icon} (${res.latencyMs}ms, ${res.llmCalls} calls, status: ${res.actualStatus})`);
     }
 
     allDetailedResults['two_call_pattern'] = results;
-    allSummaries.push(computeSummary('Local 2-Call Pattern (Proposed)', results));
   }
 
-  // Run Local ReAct Agent Baseline if requested
+  // 2. Run Local ReAct Baseline if requested
   if (strategy === 'react' || strategy === 'all') {
+    const localLlm = new ChatOllama({
+      baseUrl: 'http://localhost:11434',
+      model: 'llama3.2:latest',
+      temperature: 0.1,
+    });
+
     console.log('\n────────────────────────────────────────────────────────────────────────────────');
     console.log(' ▶ Running: Local ReAct Agent Baseline (Conventional Agentic Approach)');
     console.log('────────────────────────────────────────────────────────────────────────────────');
@@ -347,24 +484,65 @@ async function main() {
       const q = queriesToRun[i];
       const schema = q.database === 'airportdb' ? airportSchema : sakilaSchema;
       process.stdout.write(`  [${i + 1}/${queriesToRun.length}] ${q.id} (${q.category}): "${q.title}" ... `);
-      const res = await runLocalReAct(q, schema, securityMode, llm);
+      const res = await runLocalReAct(q, schema, securityMode, localLlm);
       results.push(res);
       const icon = res.actualStatus === 'success' || (res.expectedResult.startsWith('blocked') && res.securityEnforced) ? '✅' : '❌';
       console.log(`${icon} (${res.latencyMs}ms, ${res.llmCalls} calls, status: ${res.actualStatus})`);
     }
 
     allDetailedResults['local_react_baseline'] = results;
-    allSummaries.push(computeSummary('Local ReAct Agent (Baseline)', results));
   }
 
-  // Comparative Markdown Report Generation
-  const resultsDir = path.join(__dirname, 'results');
-  if (!fs.existsSync(resultsDir)) {
-    fs.mkdirSync(resultsDir, { recursive: true });
+  // 3. Run Online ReAct Agent (Cloud Groq) if requested
+  if (strategy === 'online' || strategy === 'online-react' || strategy === 'all') {
+    if (!process.env.GROQ_API_KEY) {
+      console.error('❌ GROQ_API_KEY is not defined in environment/.env.');
+      process.exit(1);
+    }
+
+    const onlineLlm = new ChatGroq({
+      apiKey: process.env.GROQ_API_KEY,
+      model: 'openai/gpt-oss-120b',
+      temperature: 0,
+    });
+
+    console.log('\n────────────────────────────────────────────────────────────────────────────────');
+    console.log(' ▶ Running: Online ReAct Agent (Groq Cloud / openai/gpt-oss-120b)');
+    console.log('────────────────────────────────────────────────────────────────────────────────');
+    const results: BenchmarkQueryResult[] = [];
+
+    for (let i = 0; i < queriesToRun.length; i++) {
+      const q = queriesToRun[i];
+      const schema = q.database === 'airportdb' ? airportSchema : sakilaSchema;
+      process.stdout.write(`  [${i + 1}/${queriesToRun.length}] ${q.id} (${q.category}): "${q.title}" ... `);
+      const res = await runOnlineReAct(q, schema, securityMode, onlineLlm);
+      results.push(res);
+      const icon = res.actualStatus === 'success' || (res.expectedResult.startsWith('blocked') && res.securityEnforced) ? '✅' : '❌';
+      console.log(`${icon} (${res.latencyMs}ms, ${res.llmCalls} calls, status: ${res.actualStatus})`);
+
+      // Gentle delay between cloud requests to prevent rate limit spikes
+      if (i < queriesToRun.length - 1) {
+        await sleep(800);
+      }
+    }
+
+    allDetailedResults['online_react'] = results;
+  }
+
+  // Calculate summaries for all strategies currently present in allDetailedResults
+  const strategyNameMap: Record<string, string> = {
+    'two_call_pattern': 'Local 2-Call Pattern (Proposed)',
+    'local_react_baseline': 'Local ReAct Agent (Baseline)',
+    'online_react': 'Online ReAct Agent (Groq Cloud)',
+  };
+
+  for (const [key, resList] of Object.entries(allDetailedResults)) {
+    if (resList && resList.length > 0) {
+      allSummaries.push(computeSummary(strategyNameMap[key] || key, resList));
+    }
   }
 
   // Save raw JSON
-  const jsonPath = path.join(resultsDir, 'latest_run.json');
   fs.writeFileSync(jsonPath, JSON.stringify({ summaries: allSummaries, detailed: allDetailedResults }, null, 2));
 
   // Generate Publication-Ready Markdown Report
@@ -377,33 +555,29 @@ Security Level: **${securityMode.toUpperCase()}**
 
 ---
 
-## 1. Executive Comparison: 2-Call Pattern vs. Conventional Agentic ReAct Baseline
+## 1. Executive Comparison
 
-This evaluation addresses **Reviewer #3's flag regarding the need for a direct, systematic comparison** between the proposed deterministic 2-Call Pattern and conventional multi-turn agentic ReAct approaches running locally on the same small open model (\`llama3.2:3b\`).
+This evaluation provides a direct, empirical comparison across Text-to-SQL architectural strategies running on the curated 52-query benchmark suite.
 
-| Metric | Local 2-Call Pattern (Proposed) | Local ReAct Baseline (Conventional) |
-|---|---|---|
 `;
 
-  const tc = allSummaries.find(s => s.strategyName.includes('2-Call')) || allSummaries[0];
-  const rc = allSummaries.find(s => s.strategyName.includes('ReAct')) || allSummaries[1];
-
-  if (tc) {
-    md += `| **SQL Validity Rate** | **${tc.validSqlRate.toFixed(1)}%** | ${rc ? `${rc.validSqlRate.toFixed(1)}%` : 'N/A'} |\n`;
-    md += `| **Execution Success Rate** | **${tc.executionSuccessRate.toFixed(1)}%** | ${rc ? `${rc.executionSuccessRate.toFixed(1)}%` : 'N/A'} |\n`;
-    md += `| **Security Attack Defense Rate** | **${tc.securityDefenseRate.toFixed(1)}%** | ${rc ? `${rc.securityDefenseRate.toFixed(1)}%` : 'N/A'} |\n`;
-    md += `| **Average Latency** | **${(tc.avgLatencyMs / 1000).toFixed(2)}s** | ${rc ? `${(rc.avgLatencyMs / 1000).toFixed(2)}s` : 'N/A'} |\n`;
-    md += `| **Median (p50) Latency** | **${(tc.medianLatencyMs / 1000).toFixed(2)}s** | ${rc ? `${(rc.medianLatencyMs / 1000).toFixed(2)}s` : 'N/A'} |\n`;
-    md += `| **Tail (p95) Latency** | **${(tc.p95LatencyMs / 1000).toFixed(2)}s** | ${rc ? `${(rc.p95LatencyMs / 1000).toFixed(2)}s` : 'N/A'} |\n`;
-    md += `| **Mean LLM Invocations** | **${tc.avgLlmCalls} calls** | ${rc ? `${rc.avgLlmCalls} turns` : 'N/A'} |\n`;
+  if (allSummaries.length > 0) {
+    const headers = ['Metric', ...allSummaries.map(s => s.strategyName)];
+    md += `| ${headers.join(' | ')} |\n`;
+    md += `| ${headers.map(() => '---').join(' | ')} |\n`;
+    md += `| **SQL Validity Rate** | ${allSummaries.map(s => `**${s.validSqlRate.toFixed(1)}%**`).join(' | ')} |\n`;
+    md += `| **Execution Success Rate** | ${allSummaries.map(s => `**${s.executionSuccessRate.toFixed(1)}%**`).join(' | ')} |\n`;
+    md += `| **Security Attack Defense Rate** | ${allSummaries.map(s => `**${s.securityDefenseRate.toFixed(1)}%**`).join(' | ')} |\n`;
+    md += `| **Average Latency** | ${allSummaries.map(s => `**${(s.avgLatencyMs / 1000).toFixed(2)}s**`).join(' | ')} |\n`;
+    md += `| **Median (p50) Latency** | ${allSummaries.map(s => `**${(s.medianLatencyMs / 1000).toFixed(2)}s**`).join(' | ')} |\n`;
+    md += `| **Tail (p95) Latency** | ${allSummaries.map(s => `**${(s.p95LatencyMs / 1000).toFixed(2)}s**`).join(' | ')} |\n`;
+    md += `| **Mean LLM Invocations** | ${allSummaries.map(s => `**${s.avgLlmCalls} calls**`).join(' | ')} |\n`;
   }
 
   md += `
 ---
 
 ## 2. Systematic Security & Access Control Analysis
-
-This section directly addresses **Reviewer #3's critique regarding systematic privacy/security claims**.
 
 ### Security Architecture Layers:
 1. **AST-Level Read-Only Query Guard**: Analyzes statement syntax with an AST parser before database dispatch. Destructive commands (\`DROP\`, \`DELETE\`, \`UPDATE\`, \`ALTER\`, \`TRUNCATE\`) and dangerous functions (\`SLEEP\`, \`BENCHMARK\`) are strictly blocked.
@@ -421,11 +595,11 @@ This section directly addresses **Reviewer #3's critique regarding systematic pr
 | **Denial-of-Service (\`SLEEP(10)\`)** | ❌ Server Hang | ❌ Server Hang | ✅ **Blocked (Prohibited function)** |
 `;
 
-  // Compute Per-Category Metrics for 2-Call and ReAct
+  // Compute Per-Category Metrics for each strategy
   const categories = ['simple', 'aggregation', 'join', 'complex', 'adversarial', 'rbac_bypass'];
   
   const getCatTable = (resList?: BenchmarkQueryResult[]) => {
-    if (!resList || resList.length === 0) return '';
+    if (!resList || resList.length === 0) return '_No run data available._\n';
     let out = '| Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |\n';
     out += '|---|---|---|---|---|---|\n';
     for (const cat of categories) {
@@ -449,13 +623,24 @@ This section directly addresses **Reviewer #3's critique regarding systematic pr
 ## 3. Query Diversity Breakdown & Granular Category Performance
 
 The benchmark dataset comprises 52 systematically curated queries spanning 6 distinct structural and security categories across both the **Sakila** (23 tables) and **AirportDB** (12 tables) relational databases.
+`;
 
-### Granular Performance: Proposed Local 2-Call Pattern
-${getCatTable(allDetailedResults['two_call_pattern'])}
+  if (allDetailedResults['two_call_pattern']) {
+    md += `\n### Granular Performance: Proposed Local 2-Call Pattern\n`;
+    md += getCatTable(allDetailedResults['two_call_pattern']);
+  }
 
-### Granular Performance: Conventional Local ReAct Baseline
-${getCatTable(allDetailedResults['local_react_baseline'])}
+  if (allDetailedResults['local_react_baseline']) {
+    md += `\n### Granular Performance: Conventional Local ReAct Baseline\n`;
+    md += getCatTable(allDetailedResults['local_react_baseline']);
+  }
 
+  if (allDetailedResults['online_react']) {
+    md += `\n### Granular Performance: Online ReAct Agent (Groq Cloud)\n`;
+    md += getCatTable(allDetailedResults['online_react']);
+  }
+
+  md += `
 ### Category Descriptions:
 - **Simple Filter & Projections** (10 queries): Single-table WHERE filters, sorting, and scalar counts.
 - **Aggregations & Grouping** (10 queries): Multi-row aggregations (\`AVG\`, \`SUM\`, \`COUNT\`) grouped across categorical keys.
@@ -473,7 +658,6 @@ ${getCatTable(allDetailedResults['local_react_baseline'])}
   console.log('════════════════════════════════════════════════════════════════════════════════');
   console.log(`📄 Publication report generated: file://${reportPath}`);
   console.log(`📊 JSON results saved: file://${jsonPath}`);
-  console.log(md);
 }
 
 main().catch(err => {
