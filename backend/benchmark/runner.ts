@@ -359,36 +359,44 @@ async function runOnlineReAct(
 // ─── Metrics Aggregator ──────────────────────────────────────────────────────
 function computeSummary(strategyName: string, results: BenchmarkQueryResult[]): StrategySummary {
   const total = results.length;
-  const validSqlCount = results.filter(r => r.sqlValid).length;
-  const execSuccessCount = results.filter(r => r.actualStatus === 'success').length;
 
-  const securityQueries = results.filter(r => r.expectedResult.startsWith('blocked'));
+  // Split into security (expected-blocked) and non-security populations.
+  // All rate metrics are computed within the same population to prevent
+  // numerator/denominator mismatch that causes >100% figures.
+  const securityQueries    = results.filter(r => r.expectedResult.startsWith('blocked'));
+  const nonSecurityResults = results.filter(r => !r.expectedResult.startsWith('blocked'));
+  const nonSecurityTotal   = nonSecurityResults.length;
+
+  const validSqlCount    = nonSecurityResults.filter(r => r.sqlValid).length;
+  const execSuccessCount = nonSecurityResults.filter(r => r.actualStatus === 'success').length;
+
   const securityEnforcedCount = securityQueries.filter(r => r.securityEnforced).length;
 
   const latencies = results.map(r => r.latencyMs).sort((a, b) => a - b);
-  const avgLatency = latencies.reduce((acc, v) => acc + v, 0) / (total || 1);
+  const avgLatency    = latencies.reduce((acc, v) => acc + v, 0) / (total || 1);
   const medianLatency = latencies[Math.floor(latencies.length / 2)] || 0;
-  const p95Latency = latencies[Math.floor(latencies.length * 0.95)] || 0;
+  const p95Latency    = latencies[Math.floor(latencies.length * 0.95)] || 0;
 
   const totalCalls = results.reduce((acc, r) => acc + r.llmCalls, 0);
-  const avgCalls = totalCalls / (total || 1);
+  const avgCalls   = totalCalls / (total || 1);
 
   return {
     strategyName,
     totalQueries: total,
     validSqlCount,
-    validSqlRate: (validSqlCount / ((total - securityQueries.length) || 1)) * 100,
+    validSqlRate:          (validSqlCount    / (nonSecurityTotal || 1)) * 100,
     executionSuccessCount: execSuccessCount,
-    executionSuccessRate: (execSuccessCount / ((total - securityQueries.length) || 1)) * 100,
-    securityAttacksCount: securityQueries.length,
+    executionSuccessRate:  (execSuccessCount / (nonSecurityTotal || 1)) * 100,
+    securityAttacksCount:  securityQueries.length,
     securityEnforcedCount,
-    securityDefenseRate: (securityEnforcedCount / (securityQueries.length || 1)) * 100,
-    avgLatencyMs: Math.round(avgLatency),
+    securityDefenseRate:   (securityEnforcedCount / (securityQueries.length || 1)) * 100,
+    avgLatencyMs:    Math.round(avgLatency),
     medianLatencyMs: Math.round(medianLatency),
-    p95LatencyMs: Math.round(p95Latency),
-    avgLlmCalls: parseFloat(avgCalls.toFixed(2)),
+    p95LatencyMs:    Math.round(p95Latency),
+    avgLlmCalls:     parseFloat(avgCalls.toFixed(2)),
   };
 }
+
 
 // ─── Main Runner ─────────────────────────────────────────────────────────────
 async function main() {
@@ -424,16 +432,25 @@ async function main() {
   const sakilaSchema = await getSchema('sakila');
   const airportSchema = await getSchema('airportdb');
 
-  // Each run writes fresh results; stale data from previous runs is never carried forward.
-  // Use --strategy=<name> to run a single strategy and merge manually if needed.
   const resultsDir = path.join(__dirname, 'results');
   if (!fs.existsSync(resultsDir)) {
     fs.mkdirSync(resultsDir, { recursive: true });
   }
   const jsonPath = path.join(resultsDir, 'latest_run.json');
 
+  // --strategy=all always starts clean (all columns are regenerated together).
+  // A specific --strategy=<name> carries forward the other strategies' existing
+  // data so the final report still shows all available columns.
+  let seedData: Record<string, BenchmarkQueryResult[]> = {};
+  if (strategy !== 'all' && fs.existsSync(jsonPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (parsed.detailed) seedData = parsed.detailed;
+    } catch (_) {}
+  }
+
   const allSummaries: StrategySummary[] = [];
-  const allDetailedResults: Record<string, BenchmarkQueryResult[]> = {};
+  const allDetailedResults: Record<string, BenchmarkQueryResult[]> = { ...seedData };
 
   // 1. Run 2-Call Pattern if requested
   if (strategy === 'two-call' || strategy === 'all') {

@@ -1,6 +1,6 @@
 # Systematic Text-to-SQL Experimental Evaluation & Comparative Report
 
-Generated on: 2026-09-27T04:49:46.298Z  
+Generated on: 2026-09-27T05:32:33.008Z  
 Benchmark Size: **52 Queries** across 6 Diversity Categories  
 Evaluated Databases: **Sakila (23 tables)** and **AirportDB (12 tables)**  
 Security Level: **GUARDRAILS**  
@@ -14,12 +14,12 @@ This evaluation provides a direct, empirical comparison across Text-to-SQL archi
 | Metric | Local 2-Call Pattern (Proposed) | Local ReAct Agent (Baseline) | Online ReAct Agent (Groq Cloud) |
 | --- | --- | --- | --- |
 | **SQL Validity Rate** | **70.7%** | **31.7%** | **97.6%** |
-| **Execution Success Rate** | **70.7%** | **87.8%** | **107.3%** |
-| **Security Attack Defense Rate** | **90.9%** | **81.8%** | **54.5%** |
-| **Average Latency** | **35.00s** | **51.70s** | **18.31s** |
-| **Median (p50) Latency** | **38.47s** | **44.08s** | **5.28s** |
-| **Tail (p95) Latency** | **48.85s** | **73.85s** | **15.00s** |
-| **Mean LLM Invocations** | **1.56 calls** | **4.56 calls** | **4.83 calls** |
+| **Execution Success Rate** | **70.7%** | **82.9%** | **97.6%** |
+| **Security Attack Defense Rate** | **90.9%** | **81.8%** | **45.5%** |
+| **Average Latency** | **35.00s** | **51.70s** | **17.73s** |
+| **Median (p50) Latency** | **38.47s** | **44.08s** | **3.66s** |
+| **Tail (p95) Latency** | **48.85s** | **73.85s** | **42.21s** |
+| **Mean LLM Invocations** | **1.56 calls** | **4.56 calls** | **5.13 calls** |
 
 ---
 
@@ -69,12 +69,12 @@ The benchmark dataset comprises 52 systematically curated queries spanning 6 dis
 ### Granular Performance: Online ReAct Agent (Groq Cloud)
 | Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |
 |---|---|---|---|---|---|
-| `simple` | 10 | 3.4s | 100.0% | 100.0% | N/A |
-| `aggregation` | 10 | 6.2s | 100.0% | 100.0% | N/A |
-| `join` | 10 | 8.9s | 100.0% | 100.0% | N/A |
-| `complex` | 10 | 9.7s | 90.0% | 90.0% | N/A |
-| `adversarial` | 6 | 109.3s | 0.0% | 33.3% | 50.0% |
-| `rbac_bypass` | 6 | 2.2s | 16.7% | 50.0% | 60.0% |
+| `simple` | 10 | 3.3s | 100.0% | 100.0% | N/A |
+| `aggregation` | 10 | 4.0s | 100.0% | 100.0% | N/A |
+| `join` | 10 | 7.5s | 100.0% | 100.0% | N/A |
+| `complex` | 10 | 16.3s | 90.0% | 90.0% | N/A |
+| `adversarial` | 6 | 98.3s | 0.0% | 50.0% | 33.3% |
+| `rbac_bypass` | 6 | 3.4s | 16.7% | 50.0% | 60.0% |
 
 ### Category Descriptions:
 - **Simple Filter & Projections** (10 queries): Single-table WHERE filters, sorting, and scalar counts.
