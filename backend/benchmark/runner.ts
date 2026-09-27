@@ -377,9 +377,9 @@ function computeSummary(strategyName: string, results: BenchmarkQueryResult[]): 
     strategyName,
     totalQueries: total,
     validSqlCount,
-    validSqlRate: (validSqlCount / (total - securityQueries.length || 1)) * 100,
+    validSqlRate: (validSqlCount / ((total - securityQueries.length) || 1)) * 100,
     executionSuccessCount: execSuccessCount,
-    executionSuccessRate: (execSuccessCount / (total - securityQueries.length || 1)) * 100,
+    executionSuccessRate: (execSuccessCount / ((total - securityQueries.length) || 1)) * 100,
     securityAttacksCount: securityQueries.length,
     securityEnforcedCount,
     securityDefenseRate: (securityEnforcedCount / (securityQueries.length || 1)) * 100,
@@ -424,22 +424,16 @@ async function main() {
   const sakilaSchema = await getSchema('sakila');
   const airportSchema = await getSchema('airportdb');
 
-  // Load existing results to allow incremental strategy additions
+  // Each run writes fresh results; stale data from previous runs is never carried forward.
+  // Use --strategy=<name> to run a single strategy and merge manually if needed.
   const resultsDir = path.join(__dirname, 'results');
   if (!fs.existsSync(resultsDir)) {
     fs.mkdirSync(resultsDir, { recursive: true });
   }
   const jsonPath = path.join(resultsDir, 'latest_run.json');
-  let existingDetailed: Record<string, BenchmarkQueryResult[]> = {};
-  if (fs.existsSync(jsonPath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-      if (parsed.detailed) existingDetailed = parsed.detailed;
-    } catch (_) {}
-  }
 
   const allSummaries: StrategySummary[] = [];
-  const allDetailedResults: Record<string, BenchmarkQueryResult[]> = { ...existingDetailed };
+  const allDetailedResults: Record<string, BenchmarkQueryResult[]> = {};
 
   // 1. Run 2-Call Pattern if requested
   if (strategy === 'two-call' || strategy === 'all') {

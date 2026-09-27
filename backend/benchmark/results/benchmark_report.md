@@ -1,6 +1,6 @@
 # Systematic Text-to-SQL Experimental Evaluation & Comparative Report
 
-Generated on: 2026-09-27T02:59:01.121Z  
+Generated on: 2026-09-27T04:49:46.298Z  
 Benchmark Size: **52 Queries** across 6 Diversity Categories  
 Evaluated Databases: **Sakila (23 tables)** and **AirportDB (12 tables)**  
 Security Level: **GUARDRAILS**  
@@ -11,15 +11,15 @@ Security Level: **GUARDRAILS**
 
 This evaluation provides a direct, empirical comparison across Text-to-SQL architectural strategies running on the curated 52-query benchmark suite.
 
-| Metric | Local ReAct Agent (Baseline) | Online ReAct Agent (Groq Cloud) |
-| --- | --- | --- |
-| **SQL Validity Rate** | **63.4%** | **97.6%** |
-| **Execution Success Rate** | **112.2%** | **107.3%** |
-| **Security Attack Defense Rate** | **0.0%** | **54.5%** |
-| **Average Latency** | **63.88s** | **10.55s** |
-| **Median (p50) Latency** | **46.53s** | **5.55s** |
-| **Tail (p95) Latency** | **300.87s** | **49.98s** |
-| **Mean LLM Invocations** | **4.46 calls** | **5.1 calls** |
+| Metric | Local 2-Call Pattern (Proposed) | Local ReAct Agent (Baseline) | Online ReAct Agent (Groq Cloud) |
+| --- | --- | --- | --- |
+| **SQL Validity Rate** | **70.7%** | **31.7%** | **97.6%** |
+| **Execution Success Rate** | **70.7%** | **87.8%** | **107.3%** |
+| **Security Attack Defense Rate** | **90.9%** | **81.8%** | **54.5%** |
+| **Average Latency** | **35.00s** | **51.70s** | **18.31s** |
+| **Median (p50) Latency** | **38.47s** | **44.08s** | **5.28s** |
+| **Tail (p95) Latency** | **48.85s** | **73.85s** | **15.00s** |
+| **Mean LLM Invocations** | **1.56 calls** | **4.56 calls** | **4.83 calls** |
 
 ---
 
@@ -46,25 +46,35 @@ This evaluation provides a direct, empirical comparison across Text-to-SQL archi
 
 The benchmark dataset comprises 52 systematically curated queries spanning 6 distinct structural and security categories across both the **Sakila** (23 tables) and **AirportDB** (12 tables) relational databases.
 
+### Granular Performance: Proposed Local 2-Call Pattern
+| Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |
+|---|---|---|---|---|---|
+| `simple` | 10 | 39.9s | 80.0% | 80.0% | N/A |
+| `aggregation` | 10 | 39.8s | 80.0% | 80.0% | N/A |
+| `join` | 10 | 41.9s | 70.0% | 70.0% | N/A |
+| `complex` | 10 | 39.6s | 50.0% | 50.0% | N/A |
+| `adversarial` | 6 | 7.4s | 0.0% | 0.0% | 100.0% |
+| `rbac_bypass` | 6 | 27.3s | 16.7% | 16.7% | 80.0% |
+
 ### Granular Performance: Conventional Local ReAct Baseline
 | Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |
 |---|---|---|---|---|---|
-| `simple` | 10 | 89.7s | 60.0% | 80.0% | N/A |
-| `aggregation` | 10 | 46.4s | 40.0% | 100.0% | N/A |
-| `join` | 10 | 109.6s | 40.0% | 60.0% | N/A |
-| `complex` | 10 | 43.1s | 30.0% | 100.0% | N/A |
-| `adversarial` | 6 | 30.5s | 66.7% | 100.0% | 0.0% |
-| `rbac_bypass` | 6 | 41.7s | 83.3% | 100.0% | 0.0% |
+| `simple` | 10 | 87.2s | 40.0% | 80.0% | N/A |
+| `aggregation` | 10 | 41.0s | 20.0% | 90.0% | N/A |
+| `join` | 10 | 51.1s | 50.0% | 80.0% | N/A |
+| `complex` | 10 | 43.4s | 10.0% | 80.0% | N/A |
+| `adversarial` | 6 | 37.0s | 0.0% | 16.7% | 83.3% |
+| `rbac_bypass` | 6 | 39.7s | 16.7% | 33.3% | 80.0% |
 
 ### Granular Performance: Online ReAct Agent (Groq Cloud)
 | Category | Count | Avg Latency (s) | SQL Validity | Exec Success | Security Defense |
 |---|---|---|---|---|---|
-| `simple` | 10 | 2.1s | 100.0% | 100.0% | N/A |
-| `aggregation` | 10 | 7.6s | 100.0% | 100.0% | N/A |
-| `join` | 10 | 8.0s | 100.0% | 100.0% | N/A |
-| `complex` | 10 | 15.6s | 90.0% | 90.0% | N/A |
-| `adversarial` | 6 | 31.7s | 0.0% | 33.3% | 50.0% |
-| `rbac_bypass` | 6 | 4.2s | 16.7% | 50.0% | 60.0% |
+| `simple` | 10 | 3.4s | 100.0% | 100.0% | N/A |
+| `aggregation` | 10 | 6.2s | 100.0% | 100.0% | N/A |
+| `join` | 10 | 8.9s | 100.0% | 100.0% | N/A |
+| `complex` | 10 | 9.7s | 90.0% | 90.0% | N/A |
+| `adversarial` | 6 | 109.3s | 0.0% | 33.3% | 50.0% |
+| `rbac_bypass` | 6 | 2.2s | 16.7% | 50.0% | 60.0% |
 
 ### Category Descriptions:
 - **Simple Filter & Projections** (10 queries): Single-table WHERE filters, sorting, and scalar counts.
